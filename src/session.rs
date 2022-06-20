@@ -61,3 +61,23 @@ impl Peer {
         // Ok(Peer { lines, rx })
     }
 }
+
+
+#[derive(Debug)]
+pub struct Person {
+    pub age: i32,
+    pub name: String,
+}
+
+pub fn TryChange(p: &mut Person)->i32 {
+    p.age = p.age + 100;
+    0
+}
+pub fn testf() {
+    let mut v = Vec::new();
+    let mut p = Person{age:33, name: "osio".to_string()};
+    TryChange(&mut p);
+    v.push(p);
+    println!("{:?}", v);
+    
+}
