@@ -1,6 +1,6 @@
-use std::{sync::Arc, collections::HashMap, net::SocketAddr};
+use std::{sync::Arc, collections::HashMap, net::SocketAddr, sync::Mutex};
 
-use tokio::{sync::{mpsc, Mutex}, io, net::TcpStream};
+use tokio::{sync::{mpsc}, io, net::TcpStream};
 
 /// Shorthand for the transmit half of the message channel.
 type Tx = mpsc::UnboundedSender<String>;
@@ -10,6 +10,7 @@ type Rx = mpsc::UnboundedReceiver<String>;
 /// The state for each connected client.
 pub struct Shared {
     pub peers: HashMap<SocketAddr, Tx>,
+    pub room_num: i32,
 }
 
 impl Shared {
@@ -17,6 +18,7 @@ impl Shared {
     pub fn new() -> Self {
         Shared {
             peers: HashMap::new(),
+            room_num: 1,
         }
     }
 }
@@ -42,21 +44,11 @@ impl Peer {
         addr: SocketAddr,
         // lines: Framed<TcpStream, LinesCodec>,
     ) -> io::Result<Peer> {
-        // Get the client socket address
-        // let addr = stream.peer_addr();
-        // let addr = match addr {
-        //     Ok(v) => v,
-        //     Err(e) => {
-        //         return Err(e);
-        //     }
-        // };
-
         // Create a channel for this peer
         let (tx, rx) = mpsc::unbounded_channel();
-
-        // Add an entry for this `Peer` in the shared state map.
-        state.lock().await.peers.insert(addr, tx);
-
+        let mut lock = state.lock().unwrap();
+        lock.peers.insert(addr, tx);
+        // state.lock().await.peers.insert(addr, tx);
         Ok(Peer {rx})
         // Ok(Peer { lines, rx })
     }
@@ -79,5 +71,5 @@ pub fn testf() {
     TryChange(&mut p);
     v.push(p);
     println!("{:?}", v);
-    
+
 }

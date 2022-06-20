@@ -1,84 +1,26 @@
 mod chat;
 mod session;
+mod processor;
 // use chat;
-use std::{
-    error::Error,
-    net::SocketAddr,
-    sync::Arc,
-};
+use anyhow::bail;
+use bytes::Bytes;
+use processor::process;
+use std::{collections::HashMap, error::Error, net::SocketAddr, sync::Arc, sync::Mutex};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::{Mutex},
+    sync::mpsc::UnboundedSender,
 };
-use bytes::{Bytes};
-async fn process(
-    state: Arc<Mutex<session::Shared>>,
-    mut stream: TcpStream,
-    addr: SocketAddr,
-) -> Result<(), Box<dyn Error>> {
-    let mut buf = [0; 1024];
+// async fn enter_room(state:Arc<Mutex<session::Shared>>, cp: ChatPacket, sender: UnboundedSender<String>) {
+//     println!("this is enter_room");
+// }
+// fn send_message(state:Arc<Mutex<session::Shared>>, cp: ChatPacket, sender: UnboundedSender<String>) {
+//     println!("this is send_message");
+// }
+// fn out_room(state:Arc<Mutex<session::Shared>>, cp: ChatPacket, sender: UnboundedSender<String>) {
+//     println!("this is out_room");
+// }
 
-    let mut peer = session::Peer::new(state.clone(), addr).await?;
-
-    let mut parser = chat::ChatParser::new();
-
-    tokio::spawn(async move {
-        loop {
-            println!("temp spawn");
-            let recv = peer.rx.recv().await;
-            let msg = match recv {
-                Some(v) => {
-                    println!("recv: {:?}", v);
-                }
-                None => {}
-            };
-        }
-    });
-    loop {
-        let n = match stream.read(&mut buf).await {
-            // socket closed
-            Ok(n) if n == 0 => {
-                return Ok(());
-            }
-            Ok(n) => n,
-            Err(e) => {
-                eprintln!("failed to read from socket; err = {:?}", e);
-                return Err(Box::new(e));
-            }
-        };
-        let bb = Bytes::copy_from_slice(&buf[0..n]);
-        parser.put(bb);
-        println!("******** 0step *******, recv! {} then parse", n);
-        loop {
-            let res = parser.parse();
-            match res {
-                Ok(v) => {
-                    println!("parsed: {:?}", v);
-                }, 
-                Err(e) => {
-                    break;
-                }
-            }
-        }
-        println!("******** 1step *******, broadcast!!?");
-        let mut state = &*state.lock().await;
-        let tx = state.peers.get(&addr);
-        match tx {
-            Some(some) => {
-                some.send("!!!!!!!!!!!!!!".to_string());
-            }, 
-            None => {
-                ()
-            }
-        }
-        if let Err(e) = stream.write_all(&buf[0..n]).await {
-            eprintln!("failed to write to socket; err = {:?}", e);
-            return Err(Box::new(e));
-        }
-    }
-    // return Ok(());
-}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = Arc::new(Mutex::new(session::Shared::new()));

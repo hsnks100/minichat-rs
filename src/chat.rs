@@ -1,4 +1,6 @@
-use std::io::prelude::*;
+use std::{io::{prelude::*, self}, borrow::Borrow};
+
+use anyhow::{Result, bail};
 
 use bytebuffer::ByteBuffer;
 use tokio::{
@@ -9,9 +11,16 @@ use tokio::{
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 #[derive(Debug)]
 pub struct ChatPacket {
-    service_code: i32,
-    length: i32,
-    body: String,
+    pub service_code: i32,
+    pub length: i32,
+    pub body: String,
+}
+
+impl ChatPacket {
+    pub fn make_bytes(&mut self) -> Vec<u8>{
+        let t = format!("{:04}&{:06}&{}", self.service_code, self.length, self.body);
+        return t.as_bytes().to_vec();
+    }
 }
 
 pub struct ChatParser {
@@ -19,7 +28,6 @@ pub struct ChatParser {
     pub length: i32,
     pub body: String,
     pub buffer: BytesMut,
-    // buffer: BufReader<[u80]>,
 }
 
 impl ChatParser {
@@ -34,43 +42,21 @@ impl ChatParser {
     pub fn put(&mut self, data: Bytes) {
         self.buffer.put(&data.to_vec()[..]);
     }
-    pub fn parse(&mut self) -> Result<ChatPacket, ()> {
+    pub fn parse(&mut self) -> anyhow::Result<ChatPacket> {
         // 0001&000004&abcd
+        // 두번 째 & 까지 들어왔으면
         if self.buffer.len() >= 12 {
             let b = &self.buffer[..];
-            let service_code = String::from_utf8(b[0..4].to_vec());
-            let service_code = match service_code {
-                Ok(v) => v,
-                Err(e) => {
-                    return Err(());
-                }
-            };
-            let service_code = match service_code.parse::<i32>() {
-                Ok(v) => v,
-                Err(e) => {
-                    return Err(());
-                }
-            };
-            let length = String::from_utf8(b[5..11].to_vec());
-            let length = match length {
-                Ok(v) => v,
-                Err(e) => {
-                    return Err(());
-                }
-            };
-            let length = match length.parse::<i32>() {
-                Ok(v) => v,
-                Err(e) => {
-                    return Err(());
-                }
-            };
+            // 길이 간보고
+            let service_code = String::from_utf8(b[0..4].to_vec())?.parse::<i32>()?;
+            let length = String::from_utf8(b[5..11].to_vec())?.parse::<i32>()?;
             println!("service code: {:?}", service_code);
             println!("length: {:?}", length);
             if (self.buffer.len()) as u32 >= 12 + length as u32 {
                 let l = 12 + length;
                 let mut reader = (&mut self.buffer).reader();
                 let mut vec = vec![0; l as usize];
-                reader.read(&mut vec);
+                reader.read(&mut vec)?;
                 println!("whole string: {:?}", vec);
                 let mut cp = ChatPacket {
                     length: 0,
@@ -80,16 +66,16 @@ impl ChatParser {
                 cp.service_code = service_code;
                 cp.length = length;
 
-                let t = String::from_utf8(vec[12..].to_vec());
-                cp.body = match t {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Err(());
-                    }
-                };
+                let t = String::from_utf8_lossy(&vec[12..]);
+                cp.body = t.to_string();
                 return Ok(cp);
             }
         }
-        return Err(());
+        bail!("yet")
     }
 }
+
+struct MakeRoomC2S {
+    password: [u8;101],
+}
+
