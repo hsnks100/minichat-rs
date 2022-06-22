@@ -1,6 +1,9 @@
-use std::{io::{prelude::*, self}, borrow::Borrow};
+use std::{
+    borrow::Borrow,
+    io::{self, prelude::*},
+};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use bytebuffer::ByteBuffer;
 use tokio::{
@@ -17,9 +20,18 @@ pub struct ChatPacket {
 }
 
 impl ChatPacket {
-    pub fn make_bytes(&mut self) -> Vec<u8>{
+    pub fn make_bytes(&mut self) -> Vec<u8> {
         let t = format!("{:04}&{:06}&{}", self.service_code, self.length, self.body);
         return t.as_bytes().to_vec();
+    }
+    pub fn new(sc: i32, body: &str) -> Self {
+        let mut ret = ChatPacket {
+            service_code: sc,
+            length: 0,
+            body: body.to_string(),
+        };
+        ret.length = body.len() as i32;
+        ret
     }
 }
 
@@ -31,13 +43,13 @@ pub struct ChatParser {
 }
 
 impl ChatParser {
-    pub fn new() -> Self{
-        return ChatParser{
-            service_code: 0, 
+    pub fn new() -> Self {
+        return ChatParser {
+            service_code: 0,
             length: 0,
             body: "".to_string(),
             buffer: BytesMut::new(),
-        }
+        };
     }
     pub fn put(&mut self, data: Bytes) {
         self.buffer.put(&data.to_vec()[..]);
@@ -76,6 +88,5 @@ impl ChatParser {
 }
 
 struct MakeRoomC2S {
-    password: [u8;101],
+    password: [u8; 101],
 }
-

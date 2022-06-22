@@ -112,14 +112,36 @@ mod tests {
 
     use tokio::sync::mpsc;
 
+    use crate::chat::ChatPacket;
+
     use super::{Shared, User};
 
     #[test]
     fn it_works() -> anyhow::Result<()> {
+        {
+            let mut send_data1 = [0u8; 12 + 3];
+            let mut send_data2 = [0u8; 1025];
+            send_data1.fill(0);
+            send_data2.fill(0);
+
+            let mut send_packet = ChatPacket::new(4, &format!("{}", 2));
+            let send_packet = send_packet.make_bytes();
+            send_data1[..send_packet.len()].copy_from_slice(&send_packet);
+            // send_data1.copy_from_slice(&send_packet);
+            println!("{:?}", send_data1);
+            let hello = &b"hello world"[..];
+            send_data2[..hello.len()].copy_from_slice(hello);
+            println!("{:?}", send_data2);
+            let mut v = Vec::new();
+            v.append(&mut send_data1.to_vec());
+            v.append(&mut send_data2.to_vec());
+            println!("v {:?}", v);
+        }
+        return Ok(());
         let mut t = Shared::new();
         let (tx, rx) = mpsc::unbounded_channel();
         let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let user = User::new("String".to_string(), socket, "100".to_string(), tx.clone());
+        let user = User::new("String".to_string(), socket, 100, tx.clone());
         let ch_index = t.add_channel("abcd")?;
         let sk = user.sess_key.clone();
         t.add_user(user);
@@ -130,7 +152,7 @@ mod tests {
         println!("chindex: {}", ch_index);
         {
             let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(126, 0, 0, 1)), 8080);
-            let user = User::new("String".to_string(), socket, "100".to_string(), tx.clone());
+            let user = User::new("String".to_string(), socket, 100, tx.clone());
             let ch_index = t.add_channel("gggg")?;
             let sk = user.sess_key.clone();
             t.add_user(user);

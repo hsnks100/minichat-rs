@@ -17,6 +17,16 @@ const CHAT_ENTER_CODE: i32 = 2;
 const MSG_SEND_CODE: i32 = 3;
 const CHAT_OUT_CODE: i32 = 4;
 const KEEPALIVE_CODE: i32 = 5;
+
+const ROOM_MAKE_SUCCESS: i32 = 1;
+const ROOM_MAKE_FAIL: i32 = 2;
+const ROOM_ENTER_SUCCESS: i32 = 3;
+const ROOM_ENTER_FAIL: i32 = 4;
+const MSG_SEND_SUCCESS: i32 = 5;
+const MSG_SEND_FAIL: i32 = 6;
+const ROOM_EXIT: i32 = 8;
+const ROOM_OUT: i32 = 9;
+
 pub async fn process(
     state: Arc<Mutex<session::Shared>>,
     mut stream: TcpStream,
@@ -127,12 +137,63 @@ fn make_room(
     Ok(())
 }
 
+// socketaddr 방에 있는 모든 tx 에게 채팅 날려주면 댐.
 fn send_message(
     state: Arc<Mutex<session::Shared>>,
     socketaddr: SocketAddr,
     cp: ChatPacket,
 ) -> anyhow::Result<()> {
     println!("send_message: {:?}", cp);
+    let message = match cp.body.find('\0') {
+        Some(s) => &cp.body[..s],
+        None => return Ok(()),
+    };
+    let mut state = state.lock().unwrap();
+    let user = match state.peers.get_mut(&socketaddr) {
+        Some(u) => u,
+        None => return Ok(()),
+    };
+    let room_no = user.channel_index;
+    let channel = match state.channels.get(&room_no) {
+        Some(s) => s,
+        None => return Ok(()),
+    };
+    let mut cnt = 0;
+    for i in &channel.users {
+        cnt += 1;
+    }
+    println!("방 참여자 수: {}", cnt);
+    for i in &channel.users {
+        let targetUser = match state.peers.get(&i) {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+
+        let mut send_data1 = [0u8; 12 + 3];
+        let mut send_data2 = [0u8; 1025];
+        send_data1.fill(0);
+        send_data2.fill(0);
+
+        let mut send_packet = ChatPacket::new(MSG_SEND_CODE, &format!("{}", 2));
+        send_packet.length = 3 + 1025;
+        let send_packet = send_packet.make_bytes();
+        send_data1[..send_packet.len()].copy_from_slice(&send_packet);
+        println!("{:?}", send_data1);
+        send_data2[..message.len()].copy_from_slice(message.as_bytes());
+        println!("{:?}", send_data2);
+        let mut v = Vec::new();
+        v.append(&mut send_data1.to_vec());
+        v.append(&mut send_data2.to_vec());
+        let sender = targetUser.tx.clone();
+
+        sender.send(String::from_utf8_lossy(v.as_slice()).to_string())?;
+        // 보내는 패킷의 구조
+        // %04d&%06d&%d 먼저 담고 1024 + 1 + 12 + 3
+        // [12] 위치에서 1025 개만큼 메시지를 쏨 (아마도 널 종료))]
+        // MSG_SIZE
+        // sender.send(String::from_utf8_lossy(send_packet.as_slice()).to_string())?;
+        // targetUser.tx.send(message)
+    }
     Ok(())
 }
 
@@ -161,7 +222,7 @@ fn enter_room(
         let mut send_packet = ChatPacket {
             service_code: 2, // 아마도 서버가 클라한테 주는 서비스코드인 듯..
             length: 1,
-            body: "3".to_string(),
+            body: ROOM_ENTER_SUCCESS.to_string(), // "3".to_string(),
         };
         let send_packet = send_packet.make_bytes();
         sender.send(String::from_utf8_lossy(send_packet.as_slice()).to_string())?;
