@@ -23,32 +23,8 @@ use tokio::{
 //     println!("this is out_room");
 // }
 
-struct Field {
-    pub fff: i32,
-}
-struct Person {
-    pub age: i32,
-    pub name: String,
-    pub props: HashMap<i32, i32>,
-}
-
-impl Person {
-    pub fn func1(&mut self) {}
-}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    {
-        let mut state = Person {
-            age: 3,
-            name: "ss".to_string(),
-            props: HashMap::new(),
-        };
-        let mut prop = &mut state.props;
-        prop.insert(2, 3);
-        let mut prop2 = &mut state.props;
-        prop2.insert(1, 3);
-        // let u = prop.get(&3);
-    }
     let state = Arc::new(Mutex::new(session::Shared::new()));
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
     loop {

@@ -60,7 +60,10 @@ pub async fn process(
             let recv = rx.recv().await;
             let recv = match recv {
                 Some(v) => v,
-                None => "".to_string(),
+                None => {
+                    println!("recv is none, writer is closing.");
+                    return;
+                }
             };
             if recv != "" {
                 let r = s_writer.write(recv.as_bytes()).await;
@@ -76,7 +79,16 @@ pub async fn process(
     });
     loop {
         // 실제로 받는 부분
-        let n = s_reader.read(&mut buf).await?;
+        let n = s_reader.read(&mut buf).await;
+        let n = match n {
+            Ok(s) => s,
+            Err(e) => {
+                let mut state = state.lock().unwrap();
+                state.delete_user(addr);
+                println!("process is end");
+                return Ok(());
+            }
+        };
         if n == 0 {
             return Ok(());
         }
@@ -120,7 +132,7 @@ fn make_room(
         None => return Ok(()),
     };
     let room_no = state.add_channel(password)?;
-    state.add_user_to_channel(room_no, socketaddr);
+    state.add_user_to_channel(room_no, socketaddr)?;
     let user = match state.peers.get_mut(&socketaddr) {
         Some(u) => u,
         None => return Ok(()),
@@ -213,18 +225,20 @@ fn enter_room(
         let password = bodies[1];
         println!("room_no: {}, password: {}", room_no, password);
         let mut state = state.lock().unwrap();
-        state.add_user_to_channel(room_no, socketaddr);
         let user = match state.peers.get_mut(&socketaddr) {
             Some(u) => u,
             None => return Ok(()),
         };
         let sender = user.tx.clone();
-        let mut send_packet = ChatPacket {
-            service_code: 2, // 아마도 서버가 클라한테 주는 서비스코드인 듯..
-            length: 1,
-            body: ROOM_ENTER_SUCCESS.to_string(), // "3".to_string(),
-        };
-        let send_packet = send_packet.make_bytes();
+        match state.add_user_to_channel(room_no, socketaddr) {
+            Ok(s) => {}
+            Err(e) => {
+                let send_packet = ChatPacket::new(2, &ROOM_ENTER_FAIL.to_string()).make_bytes();
+                sender.send(String::from_utf8_lossy(send_packet.as_slice()).to_string())?;
+                return Err(e);
+            }
+        }
+        let send_packet = ChatPacket::new(2, &ROOM_ENTER_SUCCESS.to_string()).make_bytes();
         sender.send(String::from_utf8_lossy(send_packet.as_slice()).to_string())?;
         state.display();
     }

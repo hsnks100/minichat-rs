@@ -3,12 +3,8 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, sync::Mutex};
 use anyhow::bail;
 use tokio::{io, net::TcpStream, sync::mpsc};
 
-/// Shorthand for the transmit half of the message channel.
 type Tx = mpsc::UnboundedSender<String>;
-
-/// Shorthand for the receive half of the message channel.
 type Rx = mpsc::UnboundedReceiver<String>;
-
 use super::room::*;
 
 #[derive(Debug)]
@@ -75,13 +71,18 @@ impl Shared {
         Ok(())
     }
 
-    pub fn add_user_to_channel(&mut self, ch_index: i32, user: SocketAddr) {
+    pub fn add_user_to_channel(&mut self, ch_index: i32, user: SocketAddr) -> anyhow::Result<()> {
         if let Some(s) = self.peers.get_mut(&user) {
             s.channel_index = ch_index;
         }
-        if let Some(s) = self.channels.get_mut(&ch_index) {
-            s.users.insert(user);
-        }
+        let t = match self.channels.get_mut(&ch_index) {
+            Some(s) => s,
+            None => {
+                bail!("can't add user to channel");
+            }
+        };
+        t.users.insert(user);
+        Ok(())
     }
 
     // user 를 삭제함.
@@ -108,36 +109,12 @@ impl Shared {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-    use tokio::sync::mpsc;
-
-    use crate::chat::ChatPacket;
-
     use super::{Shared, User};
-
+    use crate::chat::ChatPacket;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use tokio::sync::mpsc;
     #[test]
     fn it_works() -> anyhow::Result<()> {
-        {
-            let mut send_data1 = [0u8; 12 + 3];
-            let mut send_data2 = [0u8; 1025];
-            send_data1.fill(0);
-            send_data2.fill(0);
-
-            let mut send_packet = ChatPacket::new(4, &format!("{}", 2));
-            let send_packet = send_packet.make_bytes();
-            send_data1[..send_packet.len()].copy_from_slice(&send_packet);
-            // send_data1.copy_from_slice(&send_packet);
-            println!("{:?}", send_data1);
-            let hello = &b"hello world"[..];
-            send_data2[..hello.len()].copy_from_slice(hello);
-            println!("{:?}", send_data2);
-            let mut v = Vec::new();
-            v.append(&mut send_data1.to_vec());
-            v.append(&mut send_data2.to_vec());
-            println!("v {:?}", v);
-        }
-        return Ok(());
         let mut t = Shared::new();
         let (tx, rx) = mpsc::unbounded_channel();
         let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
